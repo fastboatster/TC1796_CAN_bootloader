@@ -123,13 +123,17 @@ void SendCANFrame(BYTE *data)
 //    UINT data_low;
 //    UINT data_high;
     if (TC1766_B) {
-        CAN_MODATAL1_BB = ((data[0]>>24) & 0xFF) + ((data[1]>>16) & 0xFF) + ((data[2]>>8) & 0xFF) + (data[3] & 0xFF);
-        CAN_MODATAH1_BB = ((data[4]>>24) & 0xFF) + ((data[5]>>16) & 0xFF) + ((data[6]>>8) & 0xFF) + (data[7] & 0xFF);
+        // CAN_MODATAL1_BB = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
+        CAN_MODATAL1_BB = 0xdeadbeef;
+      //  CAN_MODATAH1_BB = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
+
         CAN_MOFCR1_BB   = 0x08000000;
         CAN_MOCTR1_BB   = 0x0F200000;
     } else {
-        CAN_MODATAL1 = ((data[0]>>24) & 0xFF) + ((data[1]>>16) & 0xFF) + ((data[2]>>8) & 0xFF) + (data[3] & 0xFF);
-        CAN_MODATAH1 = ((data[4]>>24) & 0xFF) + ((data[5]>>16) & 0xFF) + ((data[6]>>8) & 0xFF) + (data[7] & 0xFF);
+//		CAN_MODATAL1 = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
+        CAN_MODATAL1 = 0xdeadbeef;
+
+        // CAN_MODATAH1 = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
         CAN_MOFCR1   = 0x08000000;
         CAN_MOCTR1   = 0x0F200000;
     }
@@ -891,14 +895,15 @@ void Read32(DWORD dwaddress) {
 	BYTE canData[8];
 	//	canData[0] = 0x2;
 	canData[0] = BSL_READ_MEM32;
-	canData[4] = (address_value >> 24) & 0xFF;
-	canData[3] = (address_value >> 16) & 0xFF;
-	canData[2] = (address_value >> 8) & 0xFF;
-	canData[1] = address_value & 0xFF;
+	canData[1] = (address_value >> 24) & 0xFF;
+	canData[2] = (address_value >> 16) & 0xFF;
+	canData[3] = (address_value >> 8) & 0xFF;
+	canData[4] = address_value & 0xFF;
 	canData[5] = 0xFF;
 	canData[6] = 0xFF;
 	canData[7] = 0xFF;
-	SendCANFrame(canData); // send data
+	//SendCANFrame(canData); // send data
+	SendCANMessage(address_value);
 }
 
 int main(void)

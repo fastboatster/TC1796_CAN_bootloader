@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="CANLoader" />
+		<Option pch_mode="2" />
+		<Option compiler="tricoregcc" />
+		<Build>
+			<Target title="RAM">
+				<Option output="RAM\CANLoader.elf" prefix_auto="0" extension_auto="0" />
+				<Option object_output="RAM" />
+				<Option type="1" />
+				<Option compiler="tricoregcc" />
+				<Compiler>
+					<Add option="-mcpu=tc1766" />
+					<Add option="-Os" />
+					<Add option="-nostartfiles" />
+					<Add option="-nocrt0" />
+				</Compiler>
+				<Linker>
+					<Add option="-Wl,CANLoader.ld -nocrt0 -nostartfiles" />
+					<Add option="-mcpu=tc1766" />
+					<Add option="-T CANLoader.ld" />
+					<Add option="-Wl,-Map,mapfile.lst" />
+				</Linker>
+				<ExtraCommands>
+					<Add after="tricore-objcopy -O ihex RAM/CANLoader.elf RAM/CANLoader.hex" />
+					<Add after="tricore-objdump -t RAM/CANLoader.elf" />
+				</ExtraCommands>
+				<Environment>
+					<Variable name="STRCONFIGFILE" value="EASYKIT_TC1767_RAM.cfg" />
+					<Variable name="JTAGINIT" value="$(JIOBASE)\EasyKit-tc1767.ini" />
+					<Variable name="IP" value="localhost" />
+					<Variable name="BREAKMAIN" value="1" />
+					<Variable name="DOWNLOAD" value="1" />
+					<Variable name="PORT" value="6785" />
+				</Environment>
+			</Target>
+			<Environment>
+				<Variable name="BOARD" value="EasyKit" />
+			</Environment>
+		</Build>
+		<Compiler>
+			<Add option="-DEASYKIT_TC1767" />
+			<Add directory="src" />
+			<Add directory="h" />
+		</Compiler>
+		<Linker>
+			<Add option="-Wl,-Map,Mapfile.map" />
+			<Add option="-mcpu=tc1767" />
+		</Linker>
+		<Unit filename="src\crt0.S" />
+		<Unit filename="src\main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src\reg176x.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

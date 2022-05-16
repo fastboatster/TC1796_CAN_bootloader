@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LinkerModel:LDFProject xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:LinkerModel="http://LinkerModel">
+  <MemoryRegionDescription href="../phyCORE-TC1796.mdm#/"/>
+  <Configurations>
+    <LDF href="../iRAM.lm#/"/>
+    <LDF href="../iROM.lm#/"/>
+    <LDF href="../eRAM.lm#/"/>
+  </Configurations>
+</LinkerModel:LDFProject>

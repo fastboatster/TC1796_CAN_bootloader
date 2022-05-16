@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<hightec_project_settings eclipse_build_date="0000.00">
+  <project_build_properties>
+    <pre_post_build_streps>
+      <pre_build_step/>
+      <post_build_step>
+        <build_step active="true" command="${HtcActiveToolchain}/bin/${HtcArchToolPref}-objcopy" description="The tool objcopy supports different output formats. To generate an Intel Hex format, you can use this post build step" errRedirection="${ProjDirPath}/${ConfigName}/hexError.txt" errRedirectionAppend="false" errRedirectionEnabled="false" name="Generate hex" outRedirection="${ProjDirPath}/${ConfigName}/hex.txt" outRedirectionAppend="false" outRedirectionEnabled="true" position="0">
+          <argument value="-O"/>
+          <argument value="ihex"/>
+          <argument value="${BuildArtifactFileBaseName}.elf"/>
+          <argument value="${BuildArtifactFileBaseName}.hex"/>
+        </build_step>
+      </post_build_step>
+    </pre_post_build_streps>
+  </project_build_properties>
+</hightec_project_settings>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LinkerModel:LDFMemoryDescripton xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:LinkerModel="http://LinkerModel" Description="" Name="phyCORE-TC1796" EBMCFG="">
+  <Memory Description="Data Memory Unit (DMU)" Name="Data Unit">
+    <Region Description="Data Memory" Name="SRAM" Begin="0xC0000000" Attributes="w!xp" Length="64" LengthUnit="KB"/>
+    <Region Description="Stand-by Data Memory" Name="SBRAM" Begin="0xC03FC000" Attributes="w!xp" Length="16" LengthUnit="KB"/>
+  </Memory>
+  <Memory Description="Program Memory Unit (PMU)" Name="Program Unit">
+    <Region Description="Program Flash Memory (PFLASH)" Name="PMU_PFLASH" Begin="0x80000000" Attributes="rx!p" Length="2"/>
+    <Region Description="Data Flash Memory (DFLASH)" Name="PMU_DFLASH" Begin="0xAFE00000" Attributes="r!xp" Length="128" LengthUnit="KB"/>
+    <Region Description="Boot ROM (BROM)" Name="BROM" Begin="0xAFFFC000" Attributes="rx!p" Length="8" LengthUnit="KB"/>
+    <Region Description="Test ROM (TROM)" Name="TROM" Begin="0xAFFFE000" Attributes="rx!p" Length="8" LengthUnit="KB"/>
+  </Memory>
+  <Memory Description="Program Memory Interface (PMI)" Name="Program Interface">
+    <Region Description="Scratch-Pad RAM (SPRAM)" Name="PMI_SPRAM" Begin="0xD4000000" Attributes="wx!p" Length="48" LengthUnit="KB"/>
+  </Memory>
+  <Memory Description="Data Memory Interface (DMI)" Name="Data Interface">
+    <Region Description="Local Data RAM (LDRAM)" Name="DMI_LDRAM" Begin="0xD0000000" Attributes="w!xp" Length="56" LengthUnit="KB"/>
+    <Region Description="Dual-Port RAM (DPRAM)" Name="DMI_DPRAM" Begin="0xD000E000" Attributes="w!xp" Length="8" LengthUnit="KB"/>
+  </Memory>
+  <Memory Description="PCP Memory" Name="PCP">
+    <Region Description="PCP Code Memory (CMEM)" Name="PCP_CMEM" Begin="0xF0060000" Attributes="rxp" Length="32" LengthUnit="KB"/>
+    <Region Description="PCP Data Memory (PRAM)" Name="PCP_PRAM" Begin="0xF0050000" Attributes="wp!x" Length="16" LengthUnit="KB"/>
+  </Memory>
+  <Memory Description="External RAM" Name="ERAM">
+    <Region Description="External Code Memory" Name="EXT_FLASH" Begin="0x84000000" Attributes="rx" Length="4"/>
+    <Region Description="External Data Memory" Name="EXT_RAM" Begin="0xa1000000" Attributes="w!x" Length="1"/>
+  </Memory>
+</LinkerModel:LDFMemoryDescripton>

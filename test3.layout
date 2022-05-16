@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_layout_file>
+	<ActiveTarget name="RAM" />
+	<File name="src\crt0.S" open="1" top="0" tabpos="4">
+		<Cursor position="791" topLine="27" />
+	</File>
+	<File name="src\main.c" open="1" top="1" tabpos="2">
+		<Cursor position="5637" topLine="161" />
+	</File>
+	<File name="src\reg176x.h" open="1" top="0" tabpos="3">
+		<Cursor position="6440" topLine="148" />
+	</File>
+</CodeBlocks_layout_file>

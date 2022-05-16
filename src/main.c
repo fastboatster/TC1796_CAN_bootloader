@@ -117,6 +117,24 @@ void SendCANMessage(DWORD data)
 	}
 }
 
+void SendCANFrame(BYTE *data)
+{
+//    UINT i;
+//    UINT data_low;
+//    UINT data_high;
+    if (TC1766_B) {
+        CAN_MODATAL1_BB = ((data[0]>>24) & 0xFF) + ((data[1]>>16) & 0xFF) + ((data[2]>>8) & 0xFF) + (data[3] & 0xFF);
+        CAN_MODATAH1_BB = ((data[4]>>24) & 0xFF) + ((data[5]>>16) & 0xFF) + ((data[6]>>8) & 0xFF) + (data[7] & 0xFF);
+        CAN_MOFCR1_BB   = 0x08000000;
+        CAN_MOCTR1_BB   = 0x0F200000;
+    } else {
+        CAN_MODATAL1 = ((data[0]>>24) & 0xFF) + ((data[1]>>16) & 0xFF) + ((data[2]>>8) & 0xFF) + (data[3] & 0xFF);
+        CAN_MODATAH1 = ((data[4]>>24) & 0xFF) + ((data[5]>>16) & 0xFF) + ((data[6]>>8) & 0xFF) + (data[7] & 0xFF);
+        CAN_MOFCR1   = 0x08000000;
+        CAN_MOCTR1   = 0x0F200000;
+    }
+
+}
 
 void EraseSector(DWORD dwSectorAddr,DWORD dwSize)
 {
@@ -880,7 +898,7 @@ void Read32(DWORD dwaddress) {
 	canData[5] = 0xFF;
 	canData[6] = 0xFF;
 	canData[7] = 0xFF;
-	SendCANMessage(canData); // send data
+	SendCANFrame(canData); // send data
 }
 
 int main(void)

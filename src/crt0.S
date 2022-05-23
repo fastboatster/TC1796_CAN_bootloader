@@ -111,7 +111,14 @@ csa_loop:
 	mtcr	$fcx,%d1			#; initialize FCX
 	isync
 
-
-
+	// SBRAM unlock attempt
+	movh.a %a2,0xf801
+	lea %a2,[%a2]0x1e0
+	mov %d12, 0x2
+	st.w [%a2], %d12
+	mov %d12, 0x6
+	st.w [%a2], %d12
+	mov %d12, 0xe
+	st.w [%a2], %d12
     j main
 

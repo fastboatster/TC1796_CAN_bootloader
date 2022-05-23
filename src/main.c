@@ -97,6 +97,8 @@ typedef unsigned long long QWORD;
 #pragma noclear
 BYTE HeaderBlock[HEADER_BLOCK_SIZE];
 BYTE DataBlock[PAGE_SIZE+16];
+// try to store mem value globally:
+BYTE CANBlock[8];
 
 //global variable indicating whether the device is
 //a TC1766B or TC1796B device. The CAN register addresses of this
@@ -890,19 +892,33 @@ _Bool WaitForHeader(void)
  * Returns the value from performing a direct Tricore bus read to the read address. This can be RAM, a register, or an address in Flash if it is unlocked and in read mode.
  */
 void Read32(DWORD dwaddress) {
-
-	DWORD address_value = *(DWORD *) dwaddress;
-	BYTE canData[8];
+	// need to just do a direct call of SendCANMessage with address_value, no need for global CANBlock
+	// DWORD address_value = *(DWORD *) dwaddress;
+	// BYTE canData[8];
 	//	canData[0] = 0x2;
-	canData[0] = BSL_READ_MEM32;
-	canData[1] = (address_value >> 24) & 0xFF;
-	canData[2] = (address_value >> 16) & 0xFF;
-	canData[3] = (address_value >> 8) & 0xFF;
-	canData[4] = address_value & 0xFF;
-	canData[5] = 0xFF;
-	canData[6] = 0xFF;
-	canData[7] = 0xFF;
+	BYTE *addr_val = (BYTE *) dwaddress;
+	// copy to global CANBlock
+	CANBlock[0] = addr_val[0];
+	CANBlock[1] = addr_val[1];
+	CANBlock[2] = addr_val[2];
+	CANBlock[3] = addr_val[3];
+	// ackn message:
+	//SendCANMessage(BSL_READ_MEM32);
+//	canData[0] = BSL_READ_MEM32;
+//	canData[1] = (address_value >> 24) & 0xFF;
+//	canData[2] = (address_value >> 16) & 0xFF;
+//	canData[3] = (address_value >> 8) & 0xFF;
+//	canData[4] = address_value & 0xFF;
+//	canData[5] = 0xFF;
+//	canData[6] = 0xFF;
+//	canData[7] = 0xFF;
 	//SendCANFrame(canData); // send data
+	DWORD address_value  = ((CANBlock[3] & 0xFF) << 24);
+	address_value |= ((CANBlock[2] & 0xFF) << 16);
+	address_value |= ((CANBlock[1] & 0xFF) << 8);
+	address_value |= ( CANBlock[0] & 0xFF);
+	// another ackn message:
+	//SendCANMessage(BSL_READ_MEM32);
 	SendCANMessage(address_value);
 }
 
@@ -927,6 +943,8 @@ int main(void)
 			switch (HeaderBlock[1]) {
 			// read contents of the address in memory
 			case BSL_READ_MEM32:
+				// send back the address as an ackn
+				//SendCANMessage(dwAddress);
 				Read32(dwAddress);
 				break;
 			case BSL_SEND_PSSWD:

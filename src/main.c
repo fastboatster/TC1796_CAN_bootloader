@@ -25,10 +25,20 @@
 typedef unsigned char   BYTE;
 typedef unsigned int    UINT;
 typedef unsigned short  WORD;
+typedef unsigned int   uword;    // 4 byte unsigned; prefix: uw
 typedef unsigned long   DWORD;
 typedef unsigned long long QWORD;
 
+struct compress_read_state {
+    UINT address;
+    UINT cursor;
+    UINT length;
+};
+
+struct compress_read_state compressReadState;
+
 #include "reg176x.h"
+#include "lz4.h"
 
 //FLASH CONSTANTS
 
@@ -81,7 +91,9 @@ typedef unsigned long long QWORD;
 #define BSL_RUN_FROM_SPRAM     0x03
 #define BSL_ERASE_FLASH        0x04
 #define BSL_PROTECT_FLASH      0x06
+#define BSL_READ_CMPRSSD       0x07
 #define BSL_READ_MEM32         0x08
+#define BSL_READ_UNCMPRSSD     0x0A
 #define BSL_SEND_PSSWD         0x10
 
 #define BSL_BLOCK_TYPE_ERROR   0xFF
@@ -92,6 +104,7 @@ typedef unsigned long long QWORD;
 #define BSL_PROGRAM_ERROR	   0xFA
 #define BSL_VERIFICATION_ERROR 0xF9
 #define BSL_PROTECTION_ERROR   0xF8
+#define BSL_TIMEOUT_ERROR	   0xF7
 #define BSL_SUCCESS 		   0x55
 
 #pragma noclear
@@ -122,20 +135,22 @@ void SendCANMessage(DWORD data)
 void SendCANFrame(BYTE *data)
 {
 //    UINT i;
-//    UINT data_low;
-//    UINT data_high;
+    UINT data_low;
+    UINT data_high;
+    data_low = (data[0]<<24) | (data[1]<<16) | (data[2]<<8)  | data[3];
+    data_high = (data[4]<<24) | (data[5]<<16) | (data[6]<<8)  | data[7];
     if (TC1766_B) {
         // CAN_MODATAL1_BB = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
-        CAN_MODATAL1_BB = 0xdeadbeef;
-      //  CAN_MODATAH1_BB = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
-
+        CAN_MODATAL1_BB = data_low;
+        CAN_MODATAH1_BB = data_high;
+        //CAN_MODATAH1_BB = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
         CAN_MOFCR1_BB   = 0x08000000;
         CAN_MOCTR1_BB   = 0x0F200000;
     } else {
 //		CAN_MODATAL1 = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
-        CAN_MODATAL1 = 0xdeadbeef;
-
-        // CAN_MODATAH1 = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
+        CAN_MODATAL1 = data_low;
+        CAN_MODATAH1 = data_high;
+        //CAN_MODATAH1 = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
         CAN_MOFCR1   = 0x08000000;
         CAN_MOCTR1   = 0x0F200000;
     }
@@ -867,9 +882,10 @@ _Bool WaitForHeader(void)
 		(HeaderBlock[1]!=BSL_RUN_FROM_FLASH) &&
 		(HeaderBlock[1]!=BSL_RUN_FROM_SPRAM) &&
 		(HeaderBlock[1]!=BSL_PROTECT_FLASH) &&
-		(HeaderBlock[1]!=BSL_READ_MEM32)) {
+		(HeaderBlock[1]!=BSL_READ_MEM32) &&
+        (HeaderBlock[1]!=BSL_READ_CMPRSSD) &&
+        (HeaderBlock[1]!=BSL_READ_UNCMPRSSD)) {
 			SendCANMessage(BSL_MODE_ERROR);
-
 		return 0;
 	}
 	for (i=1; i<HEADER_BLOCK_SIZE-1; i++) {
@@ -886,6 +902,46 @@ _Bool WaitForHeader(void)
 }
 
 
+void MAIN_waitAckOrTimeout(uword timeout_ms) {
+    // modified bri3d's TC1791 func
+    DWORD dataL;
+    DWORD start_val = STM_TIM0;
+    while (1) {
+        // check CAN_MOCTR0 reg status:
+        if ((CAN_MOCTR0_BB & 0x08) || (CAN_MOCTR0 & 0x08)) {
+            if (CAN_MOCTR0_BB & 0x08)
+                TC1766_B = 1;
+            else
+                TC1766_B = 0;
+
+            if (TC1766_B) {
+                dataL = CAN_MODATAL0_BB;
+            } else {
+                dataL = CAN_MODATAL0;
+            }
+            // check if the byte 0 of the incoming message is 0x7 and byte 1 is 0xAC
+            // may need to be ((dataL>>16) & 0xFF) and ((dataL>>24) & 0xFF);
+            // need to allow to respond with BSL_READ_UNCMPRSSD:
+            if((dataL & 0xFF) == BSL_READ_CMPRSSD && ((dataL >> 8) & 0xFF) == 0xAC) {
+                // clear incoming CAN data:
+                if (TC1766_B) {
+                    CAN_MOCTR0_BB = 0x00A00008;  //Clear NewDat
+                } else {
+                    CAN_MOCTR0 = 0x00A00008;  //Clear NewDat		}
+                }
+                return;
+            }
+        } else {
+            if((STM_TIM0 - start_val) > (timeout_ms * 100000)) {
+                // need to send error message:
+                SendCANMessage(BSL_TIMEOUT_ERROR);
+                return;
+            }
+        }
+    }
+}
+
+
 /*
  * 0x08: Read32.
  * Uses bytes 1-4 to set the address to read from.
@@ -893,15 +949,15 @@ _Bool WaitForHeader(void)
  */
 void Read32(DWORD dwaddress) {
 	// need to just do a direct call of SendCANMessage with address_value, no need for global CANBlock
-	// DWORD address_value = *(DWORD *) dwaddress;
+	 DWORD address_value = *(DWORD *) dwaddress;
 	// BYTE canData[8];
 	//	canData[0] = 0x2;
-	BYTE *addr_val = (BYTE *) dwaddress;
+//	BYTE *addr_val = (BYTE *) dwaddress;
 	// copy to global CANBlock
-	CANBlock[0] = addr_val[0];
-	CANBlock[1] = addr_val[1];
-	CANBlock[2] = addr_val[2];
-	CANBlock[3] = addr_val[3];
+//	CANBlock[0] = addr_val[0];
+//	CANBlock[1] = addr_val[1];
+//	CANBlock[2] = addr_val[2];
+//	CANBlock[3] = addr_val[3];
 	// ackn message:
 	//SendCANMessage(BSL_READ_MEM32);
 //	canData[0] = BSL_READ_MEM32;
@@ -913,14 +969,64 @@ void Read32(DWORD dwaddress) {
 //	canData[6] = 0xFF;
 //	canData[7] = 0xFF;
 	//SendCANFrame(canData); // send data
-	DWORD address_value  = ((CANBlock[3] & 0xFF) << 24);
-	address_value |= ((CANBlock[2] & 0xFF) << 16);
-	address_value |= ((CANBlock[1] & 0xFF) << 8);
-	address_value |= ( CANBlock[0] & 0xFF);
+//	DWORD address_value  = ((CANBlock[3] & 0xFF) << 24);
+//	address_value |= ((CANBlock[2] & 0xFF) << 16);
+//	address_value |= ((CANBlock[1] & 0xFF) << 8);
+//	address_value |= ( CANBlock[0] & 0xFF);
 	// another ackn message:
 	//SendCANMessage(BSL_READ_MEM32);
 	SendCANMessage(address_value);
 }
+
+
+void ReadCompressed(DWORD address, DWORD length) {
+    compressReadState.address = address;
+    compressReadState.length = length;
+    compressReadState.cursor = 0;
+
+    for (;;) {
+        const char* inpPtr = (const char*) (compressReadState.address + compressReadState.cursor);
+        const int inpBytes = MIN(4096, compressReadState.length - compressReadState.cursor);
+        compressReadState.cursor += inpBytes;
+        if (0 == inpBytes) {
+            break;
+        }
+        {
+            char cmpBuf[LZ4_COMPRESSBOUND(4096)];
+            const int cmpBytes = LZ4_compress_default(inpPtr, cmpBuf, inpBytes,
+                                                      LZ4_COMPRESSBOUND(4096));
+            if (cmpBytes <= 0) {
+                break;
+            }
+            BYTE canData[8];
+            canData[0] = BSL_READ_CMPRSSD;
+            canData[1] = ((DWORD) inpPtr >> 24) & 0xFF;
+            canData[2] = ((DWORD) inpPtr >> 16) & 0xFF;
+            canData[3] = ((DWORD) inpPtr >> 8) & 0xFF;
+            canData[4] = (DWORD) inpPtr & 0xFF;
+            canData[5] = (cmpBytes >> 16) & 0xFF;
+            canData[6] = (cmpBytes >> 8) & 0xFF;
+            canData[7] = cmpBytes & 0xFF;
+            SendCANFrame(canData);
+            BYTE canSeq = 0;
+            int i = 0;
+            for (i = 0; i < cmpBytes; i += 6) {
+                canSeq++;
+                canData[0] = BSL_READ_CMPRSSD;
+                canData[1] = canSeq;
+                canData[2] = cmpBuf[i];
+                canData[3] = cmpBuf[i + 1];
+                canData[4] = cmpBuf[i + 2];
+                canData[5] = cmpBuf[i + 3];
+                canData[6] = cmpBuf[i + 4];
+                canData[7] = cmpBuf[i + 5];
+                SendCANFrame(canData);
+            }
+            MAIN_waitAckOrTimeout(10000U);
+        }
+    }
+}
+
 
 int main(void)
 {
@@ -1010,6 +1116,18 @@ int main(void)
 				}
 				break;
 
+            case BSL_READ_CMPRSSD:
+                //Read the sector size additionally to the sector address
+                dwSize  = ((HeaderBlock[6] & 0xFF) << 24);
+                dwSize |= ((HeaderBlock[7] & 0xFF) << 16);
+                dwSize |= ((HeaderBlock[8] & 0xFF) << 8);
+                dwSize |= ( HeaderBlock[9] & 0xFF);
+                SendCANMessage(BSL_READ_CMPRSSD); // send ackn for header
+                ReadCompressed(dwAddress, dwSize)
+                break;
+                case BSL_READ_UNCMPRSSD:
+                    SendCANMessage(BSL_MODE_ERROR);
+                    break;
 			case BSL_ERASE_FLASH:
 
 				//Read the sector size additionally to the sector address

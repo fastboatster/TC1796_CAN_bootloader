@@ -1052,6 +1052,56 @@ void ReadCompressed(DWORD address, DWORD length) {
 }
 
 
+void ReadUncompressed(DWORD address, DWORD length) {
+    DWORD address_ptr = *(DWORD *) address;
+    for (;;) {
+        //        const char* inpPtr = (const char*) (compressReadState.address + compressReadState.cursor);
+        //        const int inpBytes = MIN(4096, compressReadState.length - compressReadState.cursor);
+        //        compressReadState.cursor += inpBytes;
+        if (0 == length) {
+            break;
+        }
+
+        BYTE canData[8];
+        canData[0] = BSL_READ_UNCMPRSSD;
+        // address of the area:
+        canData[1] = (address >> 24) & 0xFF;
+        canData[2] = (address >> 16) & 0xFF;
+        canData[3] = (address >> 8) & 0xFF;
+        canData[4] = (address & 0xFF);
+        canData[5] = 0xFF;
+        canData[6] = 0xFF;
+        canData[7] = 0xFF;
+        SendCANFrame(canData);
+        BYTE canSeq = 0;
+        int i = 0;
+        int num_remaining_bytes = length;
+        for (i = 0; i < length; i += 6) {
+            canSeq++;
+            canData[0] = BSL_READ_UNCMPRSSD;
+            canData[1] = canSeq;
+            if (num_remaining_bytes < 6) {
+                int j = 0;
+                for (j = 0; j < num_remaining_bytes; j++) {
+                    canData[2 + j] = address_ptr[i + j];
+                }
+            } else {
+                canData[2] = address_ptr[i];
+                canData[3] = address_ptr[i + 1];
+                canData[4] = address_ptr[i + 2];
+                canData[5] = address_ptr[i + 3];
+                canData[6] = address_ptr[i + 4];
+                canData[7] = address_ptr[i + 5];
+            }
+            SendCANFrame(canData);
+            num_remaining_bytes -= 6;
+        }
+        MAIN_waitAckOrTimeout(10000U);
+
+    }
+}
+
+
 int main(void)
 {
 	//assuming a TC1766B device
@@ -1105,7 +1155,8 @@ int main(void)
                  else { // 0x00
                     flashProtection = READ_PROTECTION;
                 }
-                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr, User0Password1, User0Password2, ucb)
+                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr,
+                                    User0Password1, User0Password2, ucb)
                 SendCANMessage(BSL_SUCCESS);
                 break;
 			case BSL_PROGRAM_FLASH:
@@ -1177,11 +1228,16 @@ int main(void)
                 SendCANMessage(BSL_READ_CMPRSSD); // send ackn for header
                 ReadCompressed(dwAddress, dwSize)
                 break;
-                case BSL_READ_UNCMPRSSD:
-                    SendCANMessage(BSL_MODE_ERROR);
-                    break;
+            case BSL_READ_UNCMPRSSD:
+                //Read the sector size additionally to the sector address
+                dwSize  = ((HeaderBlock[6] & 0xFF) << 24);
+                dwSize |= ((HeaderBlock[7] & 0xFF) << 16);
+                dwSize |= ((HeaderBlock[8] & 0xFF) << 8);
+                dwSize |= ( HeaderBlock[9] & 0xFF);
+                SendCANMessage(BSL_READ_UNCMPRSSD); // send ackn for header
+                ReadUncompressed(dwAddress, dwSize);
+                break;
 			case BSL_ERASE_FLASH:
-
 				//Read the sector size additionally to the sector address
 				dwSize  = ((HeaderBlock[6] & 0xFF) << 24);
 				dwSize |= ((HeaderBlock[7] & 0xFF) << 16);

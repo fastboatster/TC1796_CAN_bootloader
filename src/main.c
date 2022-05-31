@@ -107,11 +107,20 @@ struct compress_read_state compressReadState;
 #define BSL_TIMEOUT_ERROR	   0xF7
 #define BSL_SUCCESS 		   0x55
 
+#ifndef MIN
+#define MIN(a,b)            (((a) < (b)) ? (a) : (b))
+#endif
+
 #pragma noclear
 BYTE HeaderBlock[HEADER_BLOCK_SIZE];
 BYTE DataBlock[PAGE_SIZE+16];
 // try to store mem value globally:
 BYTE CANBlock[8];
+
+//global variable indicating whether the device is
+//a TC1766B or TC1796B device. The CAN register addresses of this
+//of this are different from those of TC1766, TC1796
+_Bool TC1766_B;
 
 enum FLASH_PROTECTION {
     READ_PROTECTION = 0x08,
@@ -135,11 +144,6 @@ void FLASH_sendPasswords(enum FLASH_PROTECTION whichProtection, DWORD flashBaseA
     __asm("nop");
     __asm("nop");
 }
-
-//global variable indicating whether the device is
-//a TC1766B or TC1796B device. The CAN register addresses of this
-//of this are different from those of TC1766, TC1796
-_Bool TC1766_B;
 
 
 void SendCANMessage(DWORD data)
@@ -1053,7 +1057,7 @@ void ReadCompressed(DWORD address, DWORD length) {
 
 
 void ReadUncompressed(DWORD address, DWORD length) {
-    DWORD address_ptr = *(DWORD *) address;
+    DWORD *address_ptr = (DWORD *) address;
     for (;;) {
         //        const char* inpPtr = (const char*) (compressReadState.address + compressReadState.cursor);
         //        const int inpBytes = MIN(4096, compressReadState.length - compressReadState.cursor);
@@ -1114,6 +1118,8 @@ int main(void)
 
             DWORD dwSize;
 			DWORD dwAddress;
+            DWORD Usr0Password1;
+            DWORD User0Password2;
 
 			dwAddress  = ((HeaderBlock[2] & 0xFF) << 24);
 		    dwAddress |= ((HeaderBlock[3] & 0xFF) << 16);
@@ -1128,22 +1134,22 @@ int main(void)
 				Read32(dwAddress);
 				break;
 			case BSL_SEND_PSSWD:
-				// will get passwords:
-                DWORD User0Password1;
-                User0Password1  = ((HeaderBlock[2] & 0xFF) << 24);
-                User0Password1 |= ((HeaderBlock[3] & 0xFF) << 16);
-                User0Password1 |= ((HeaderBlock[4] & 0xFF) << 8);
-                User0Password1 |= ( HeaderBlock[5] & 0xFF);
-                DWORD User0Password2;
+
+                Usr0Password1  = ((HeaderBlock[2] & 0xFF) << 24);
+                Usr0Password1 |= ((HeaderBlock[3] & 0xFF) << 16);
+                Usr0Password1 |= ((HeaderBlock[4] & 0xFF) << 8);
+                Usr0Password1 |= ( HeaderBlock[5] & 0xFF);
+
                 User0Password2  = ((HeaderBlock[6] & 0xFF) << 24);
                 User0Password2 |= ((HeaderBlock[7] & 0xFF) << 16);
                 User0Password2 |= ((HeaderBlock[8] & 0xFF) << 8);
                 User0Password2 |= ( HeaderBlock[9] & 0xFF);
                 DWORD dwFlashBaseAddr;
-                if (HeaderBlock[10] == 0x01)
+                if (HeaderBlock[10] == 0x01) {
                     dwFlashBaseAddr = 0xA0200000;
-                else
-                    dwFlashBaseAddr = 0xA0000000; // 0x00
+                } else {
+                    dwFlashBaseAddr = 0xA0000000;
+                }; // 0x00
                 // get which protection, read or write from the header block:
                 DWORD flashProtection;
                 //  can be 0, 1 or 2. 0 is probably for reading, 1 is for writing
@@ -1151,28 +1157,21 @@ int main(void)
                 ucb = HeaderBlock[12];
                 if (HeaderBlock[11] == 0x01) {
                     flashProtection = WRITE_PROTECTION;
-                }
-                 else { // 0x00
+                } else { // 0x00
                     flashProtection = READ_PROTECTION;
-                }
-                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr,
-                                    User0Password1, User0Password2, ucb)
+                };
+                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr, Usr0Password1, User0Password2, ucb);
                 SendCANMessage(BSL_SUCCESS);
                 break;
 			case BSL_PROGRAM_FLASH:
 				SendCANMessage(BSL_SUCCESS); // send ackn for header
-
 				_Bool validRange=0;
 				_Bool PFlash=1;
 				//check if user start address is in boundary
 				if ((dwAddress >= 0xA0000000) && (dwAddress <= 0xA03FFFFF)) {
-
 					validRange=1;
-
-
 				} else if (((dwAddress >= 0xAFE00000) && (dwAddress <= 0xAFE07FFF)) ||
 					((dwAddress >= 0xAFE10000) && (dwAddress <= 0xAFE17FFF))) {
-
 					validRange=1;
 					PFlash = 0;
 				}
@@ -1226,7 +1225,7 @@ int main(void)
                 dwSize |= ((HeaderBlock[8] & 0xFF) << 8);
                 dwSize |= ( HeaderBlock[9] & 0xFF);
                 SendCANMessage(BSL_READ_CMPRSSD); // send ackn for header
-                ReadCompressed(dwAddress, dwSize)
+                ReadCompressed(dwAddress, dwSize);
                 break;
             case BSL_READ_UNCMPRSSD:
                 //Read the sector size additionally to the sector address
@@ -1264,7 +1263,6 @@ int main(void)
 
 					if(DisableWriteProtection())
 						RemoveProtection();
-
 				}
 
 				for (;;); //infinite loop, device shall be reset!

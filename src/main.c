@@ -29,6 +29,14 @@ typedef unsigned int    uword;    // 4 byte unsigned; prefix: uw
 typedef unsigned long   DWORD;
 typedef unsigned long long QWORD;
 
+struct compress_read_state {
+    UINT address;
+    UINT cursor;
+    UINT length;
+};
+
+struct compress_read_state compressReadState;
+
 #include "reg176x.h"
 #include "lz4.h"
 

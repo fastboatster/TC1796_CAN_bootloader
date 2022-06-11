@@ -17,7 +17,7 @@
 **  							                                          *
 **  REMARKS :                                                             *
 **    -Stack and CSA initialized        								  *
-**    -Interrupt and Trap table not initialized                            *
+**    -Interrupt and Trap table not initialized                           *
 **  							                                          *
 **************************************************************************/
 
@@ -25,17 +25,9 @@
 typedef unsigned char   BYTE;
 typedef unsigned int    UINT;
 typedef unsigned short  WORD;
-typedef unsigned int   uword;    // 4 byte unsigned; prefix: uw
+typedef unsigned int    uword;    // 4 byte unsigned; prefix: uw
 typedef unsigned long   DWORD;
 typedef unsigned long long QWORD;
-
-struct compress_read_state {
-    UINT address;
-    UINT cursor;
-    UINT length;
-};
-
-struct compress_read_state compressReadState;
 
 #include "reg176x.h"
 #include "lz4.h"
@@ -43,7 +35,8 @@ struct compress_read_state compressReadState;
 //FLASH CONSTANTS
 
 #define PAGE_SIZE        	256   // program FLASH page size
-#define DFLASH_PAGE_SIZE	128	  // data FLASH page size
+#define DFLASH_PAGE_SIZE	128   // data FLASH page size
+#define CMPRSSD_BLOCK_SIZE	4096  // size of the data chunk to compress using LZ4
 
 #define PAGE_START_MASK			0x0FF
 #define SECTOR_START_MASK		0x0FFF
@@ -95,6 +88,7 @@ struct compress_read_state compressReadState;
 #define BSL_READ_MEM32         0x08
 #define BSL_READ_UNCMPRSSD     0x0A
 #define BSL_SEND_PSSWD         0x10
+#define BSL_KEEP_ALIVE         0x3E
 
 #define BSL_BLOCK_TYPE_ERROR   0xFF
 #define BSL_MODE_ERROR 		   0xFE
@@ -114,13 +108,8 @@ struct compress_read_state compressReadState;
 #pragma noclear
 BYTE HeaderBlock[HEADER_BLOCK_SIZE];
 BYTE DataBlock[PAGE_SIZE+16];
-// try to store mem value globally:
-BYTE CANBlock[8];
-
-//global variable indicating whether the device is
-//a TC1766B or TC1796B device. The CAN register addresses of this
-//of this are different from those of TC1766, TC1796
-_Bool TC1766_B;
+//// try to store mem value globally:
+//BYTE CANBlock[8];
 
 enum FLASH_PROTECTION {
     READ_PROTECTION = 0x08,
@@ -145,16 +134,24 @@ void FLASH_sendPasswords(enum FLASH_PROTECTION whichProtection, DWORD flashBaseA
     __asm("nop");
 }
 
+// global variable indicating whether the device is
+// a TC1766B or TC1796B device. The CAN register addresses
+// of these are different from those of TC1766, TC1796
+_Bool TC1766_B;
 
 void SendCANMessage(DWORD data)
 {
 	if (TC1766_B) {
+        while ( (CAN_MOCTR1_BB & 0x00000100) != 0x00000000 ) {};
 		CAN_MODATAL1_BB = data;
-		CAN_MOFCR1_BB   = 0x04000000;
+		CAN_MODATAH1_BB = 0xFFFFFFFF;
+		CAN_MOFCR1_BB   = 0x08000000;
 		CAN_MOCTR1_BB   = 0x0F200000;
 	} else {
+        while ( (CAN_MOCTR1 & 0x00000100) != 0x00000000 ) {};
 		CAN_MODATAL1 = data;
-		CAN_MOFCR1   = 0x04000000;
+		CAN_MODATAH1 = 0xFFFFFFFF;
+		CAN_MOFCR1   = 0x08000000;
 		CAN_MOCTR1   = 0x0F200000;
 	}
 }
@@ -162,21 +159,30 @@ void SendCANMessage(DWORD data)
 void SendCANFrame(BYTE *data)
 {
 //    UINT i;
-    UINT data_low;
-    UINT data_high;
-    data_low = (data[0]<<24) | (data[1]<<16) | (data[2]<<8)  | data[3];
-    data_high = (data[4]<<24) | (data[5]<<16) | (data[6]<<8)  | data[7];
+    DWORD data_low;
+    DWORD data_high;
+    data_low = ((DWORD)(data[0] & 0xFF)) | ((DWORD)(data[1] & 0xFF) << 8) | ((DWORD)(data[2] & 0xFF) << 16)  | ((DWORD)(data[3] & 0xFF) << 24);
+    data_high = ((DWORD)(data[4] & 0xFF)) | ((DWORD)(data[5] & 0xFF) << 8) | ((DWORD)(data[6] & 0xFF) << 16)  | ((DWORD)(data[7] & 0xFF) << 24);
+    // need to check MOCTR TX REQ bit:
     if (TC1766_B) {
         // CAN_MODATAL1_BB = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
+	    while ((CAN_MOCTR1_BB & 0x00000100) != 0x00000000 ) {};
+	    // CAN_MOCTR1 = 0x00080000; // set new data
+        // CAN_MOFCR1_BB   = 0x08000000;
         CAN_MODATAL1_BB = data_low;
         CAN_MODATAH1_BB = data_high;
-        //CAN_MODATAH1_BB = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
-        CAN_MOFCR1_BB   = 0x08000000;
+	    // CAN_MOCTR1 = 0x00000020; // message valid
+        // CAN_MODATAH1_BB = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
+	    CAN_MOFCR1_BB   = 0x08000000;
         CAN_MOCTR1_BB   = 0x0F200000;
     } else {
-//		CAN_MODATAL1 = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
+        // CAN_MODATAL1 = (data[0]<<24) + (data[1]<<16) + (data[2]<<8)  + data[3];
+	    while ( (CAN_MOCTR1 & 0x00000100) != 0x00000000 ) {};
+	    // CAN_MOCTR1 = 0x00080000; // set new data
+	    // CAN_MOFCR1   = 0x08000000;
         CAN_MODATAL1 = data_low;
         CAN_MODATAH1 = data_high;
+	    // CAN_MOCTR1 = 0x00000020; // message valid
         //CAN_MODATAH1 = (data[4]<<24) + (data[5]<<16) + (data[6]<<8)  + data[7];
         CAN_MOFCR1   = 0x08000000;
         CAN_MOCTR1   = 0x0F200000;
@@ -912,7 +918,8 @@ _Bool WaitForHeader(void)
 		(HeaderBlock[1]!=BSL_READ_MEM32) &&
         (HeaderBlock[1]!=BSL_READ_CMPRSSD) &&
         (HeaderBlock[1]!=BSL_READ_UNCMPRSSD) &&
-        (HeaderBlock[1]!=BSL_SEND_PSSWD)) {
+        (HeaderBlock[1]!=BSL_SEND_PSSWD) &&
+	    (HeaderBlock[1]!=BSL_KEEP_ALIVE)) {
 			SendCANMessage(BSL_MODE_ERROR);
 		return 0;
 	}
@@ -929,8 +936,7 @@ _Bool WaitForHeader(void)
 	return 1;
 }
 
-
-void MAIN_waitAckOrTimeout(uword timeout_ms) {
+_Bool MAIN_waitAckOrTimeout(uword timeout_ms) {
     // modified bri3d's TC1791 func
     DWORD dataL;
     DWORD start_val = STM_TIM0;
@@ -957,13 +963,14 @@ void MAIN_waitAckOrTimeout(uword timeout_ms) {
                 } else {
                     CAN_MOCTR0 = 0x00A00008;  //Clear NewDat		}
                 }
-                return;
+                // SendCANMessage(BSL_SUCCESS);
+                return 0;
             }
         } else {
             if((STM_TIM0 - start_val) > (timeout_ms * 100000)) {
                 // need to send error message:
-                SendCANMessage(BSL_TIMEOUT_ERROR);
-                return;
+                // SendCANMessage(BSL_TIMEOUT_ERROR);
+                return 1;
             }
         }
     }
@@ -977,32 +984,7 @@ void MAIN_waitAckOrTimeout(uword timeout_ms) {
  */
 void Read32(DWORD dwaddress) {
 	// need to just do a direct call of SendCANMessage with address_value, no need for global CANBlock
-	 DWORD address_value = *(DWORD *) dwaddress;
-	// BYTE canData[8];
-	//	canData[0] = 0x2;
-//	BYTE *addr_val = (BYTE *) dwaddress;
-	// copy to global CANBlock
-//	CANBlock[0] = addr_val[0];
-//	CANBlock[1] = addr_val[1];
-//	CANBlock[2] = addr_val[2];
-//	CANBlock[3] = addr_val[3];
-	// ackn message:
-	//SendCANMessage(BSL_READ_MEM32);
-//	canData[0] = BSL_READ_MEM32;
-//	canData[1] = (address_value >> 24) & 0xFF;
-//	canData[2] = (address_value >> 16) & 0xFF;
-//	canData[3] = (address_value >> 8) & 0xFF;
-//	canData[4] = address_value & 0xFF;
-//	canData[5] = 0xFF;
-//	canData[6] = 0xFF;
-//	canData[7] = 0xFF;
-	//SendCANFrame(canData); // send data
-//	DWORD address_value  = ((CANBlock[3] & 0xFF) << 24);
-//	address_value |= ((CANBlock[2] & 0xFF) << 16);
-//	address_value |= ((CANBlock[1] & 0xFF) << 8);
-//	address_value |= ( CANBlock[0] & 0xFF);
-	// another ackn message:
-	//SendCANMessage(BSL_READ_MEM32);
+    DWORD address_value = *(DWORD *) dwaddress;
 	SendCANMessage(address_value);
 }
 
@@ -1014,15 +996,15 @@ void ReadCompressed(DWORD address, DWORD length) {
 
     for (;;) {
         const char* inpPtr = (const char*) (compressReadState.address + compressReadState.cursor);
-        const int inpBytes = MIN(4096, compressReadState.length - compressReadState.cursor);
+        const int inpBytes = MIN(CMPRSSD_BLOCK_SIZE, compressReadState.length - compressReadState.cursor);
         compressReadState.cursor += inpBytes;
         if (0 == inpBytes) {
             break;
         }
         {
-            char cmpBuf[LZ4_COMPRESSBOUND(4096)];
+            char cmpBuf[LZ4_COMPRESSBOUND(CMPRSSD_BLOCK_SIZE)];
             const int cmpBytes = LZ4_compress_default(inpPtr, cmpBuf, inpBytes,
-                                                      LZ4_COMPRESSBOUND(4096));
+                                                      LZ4_COMPRESSBOUND(CMPRSSD_BLOCK_SIZE));
             if (cmpBytes <= 0) {
                 break;
             }
@@ -1049,47 +1031,65 @@ void ReadCompressed(DWORD address, DWORD length) {
                 canData[6] = cmpBuf[i + 4];
                 canData[7] = cmpBuf[i + 5];
                 SendCANFrame(canData);
-            }
-            MAIN_waitAckOrTimeout(10000U);
+            };
+            // if no ack in time, send err message and return
+            if (MAIN_waitAckOrTimeout(10000U) == 1) {
+                SendCANMessage(BSL_TIMEOUT_ERROR);
+                return;
+            } else {
+                SendCANMessage(BSL_SUCCESS);
+            };
         }
     }
 }
 
-
 void ReadUncompressed(DWORD address, DWORD length) {
-    DWORD *address_ptr = (DWORD *) address;
+    // length is a total size of data to be read, a multiple of 4096 Bytes: n * 4096 + k where k < 4096
+    BYTE *address_ptr = (BYTE *) address;
+    DWORD remaining_length = length;
+
     for (;;) {
-        //        const char* inpPtr = (const char*) (compressReadState.address + compressReadState.cursor);
-        //        const int inpBytes = MIN(4096, compressReadState.length - compressReadState.cursor);
-        //        compressReadState.cursor += inpBytes;
-        if (0 == length) {
+        DWORD num_remaining_bytes = MIN(PAGE_SIZE, remaining_length);
+        if (0 == num_remaining_bytes) {
             break;
         }
 
         BYTE canData[8];
         canData[0] = BSL_READ_UNCMPRSSD;
         // address of the area:
-        canData[1] = (address >> 24) & 0xFF;
-        canData[2] = (address >> 16) & 0xFF;
-        canData[3] = (address >> 8) & 0xFF;
-        canData[4] = (address & 0xFF);
-        canData[5] = 0xFF;
-        canData[6] = 0xFF;
-        canData[7] = 0xFF;
+        DWORD curr_start_addr = (DWORD) address_ptr;
+        canData[1] = (curr_start_addr >> 24) & 0xFF;
+        canData[2] = (curr_start_addr >> 16) & 0xFF;
+        canData[3] = (curr_start_addr >> 8) & 0xFF;
+        canData[4] = (curr_start_addr & 0xFF);
+        // need to show length:
+        canData[5] = (num_remaining_bytes >> 16) & 0xFF;
+        canData[6] = (num_remaining_bytes >> 8) & 0xFF;
+        canData[7] = (num_remaining_bytes & 0xFF);
         SendCANFrame(canData);
+
         BYTE canSeq = 0;
         int i = 0;
-        int num_remaining_bytes = length;
-        for (i = 0; i < length; i += 6) {
+        DWORD num_bytes_to_transmit = num_remaining_bytes;
+
+        for (i = 0; i < num_bytes_to_transmit; i += 6) { // num_bytes_to_transmit 16 i = 0; 10 and 6
             canSeq++;
             canData[0] = BSL_READ_UNCMPRSSD;
             canData[1] = canSeq;
-            if (num_remaining_bytes < 6) {
+            // final chunk which is less than a single can frame payload len
+            if ((num_bytes_to_transmit - i) < 6) {
+                // need to make sure we don't transmit the last bytes of previous message
                 int j = 0;
-                for (j = 0; j < num_remaining_bytes; j++) {
-                    canData[2 + j] = address_ptr[i + j];
-                }
+                for (j = 0; j < 8; j++) {
+                    if (j < (num_bytes_to_transmit - i)) {
+                        canData[2 + j] = address_ptr[i + j];
+                    } else {
+                        canData[2 + j] = 0xAA;
+                    }
+                };
+
             } else {
+		        // this will work if address_ptr is BYTE*:
                 canData[2] = address_ptr[i];
                 canData[3] = address_ptr[i + 1];
                 canData[4] = address_ptr[i + 2];
@@ -1098,13 +1098,19 @@ void ReadUncompressed(DWORD address, DWORD length) {
                 canData[7] = address_ptr[i + 5];
             }
             SendCANFrame(canData);
-            num_remaining_bytes -= 6;
-        }
-        MAIN_waitAckOrTimeout(10000U);
-
+            // num_bytes_to_transmit -= 6; // 10 4
+        };
+        remaining_length -= num_remaining_bytes;
+        address_ptr += num_remaining_bytes;
+        // if no ack in time, send err message and return
+        if (MAIN_waitAckOrTimeout(10000U) == 1) {
+            SendCANMessage(BSL_TIMEOUT_ERROR);
+            return;
+        } else {
+            SendCANMessage(BSL_SUCCESS);
+        };
     }
 }
-
 
 int main(void)
 {
@@ -1118,13 +1124,13 @@ int main(void)
 
             DWORD dwSize;
 			DWORD dwAddress;
-            DWORD Usr0Password1;
-            DWORD User0Password2;
-
+			DWORD Usr0Password1;
+			DWORD User0Password2;
 			dwAddress  = ((HeaderBlock[2] & 0xFF) << 24);
-		    dwAddress |= ((HeaderBlock[3] & 0xFF) << 16);
-		    dwAddress |= ((HeaderBlock[4] & 0xFF) << 8);
-		    dwAddress |= ( HeaderBlock[5] & 0xFF);
+            dwAddress |= ((HeaderBlock[3] & 0xFF) << 16);
+            dwAddress |= ((HeaderBlock[4] & 0xFF) << 8);
+            dwAddress |= ( HeaderBlock[5] & 0xFF);
+			BYTE CAN_test_arr[8];
 
 			switch (HeaderBlock[1]) {
 			// read contents of the address in memory
@@ -1133,8 +1139,7 @@ int main(void)
 				//SendCANMessage(dwAddress);
 				Read32(dwAddress);
 				break;
-			case BSL_SEND_PSSWD:
-
+		    case BSL_SEND_PSSWD:
                 Usr0Password1  = ((HeaderBlock[2] & 0xFF) << 24);
                 Usr0Password1 |= ((HeaderBlock[3] & 0xFF) << 16);
                 Usr0Password1 |= ((HeaderBlock[4] & 0xFF) << 8);
@@ -1145,11 +1150,10 @@ int main(void)
                 User0Password2 |= ((HeaderBlock[8] & 0xFF) << 8);
                 User0Password2 |= ( HeaderBlock[9] & 0xFF);
                 DWORD dwFlashBaseAddr;
-                if (HeaderBlock[10] == 0x01) {
+                if (HeaderBlock[10] == 0x01)
                     dwFlashBaseAddr = 0xA0200000;
-                } else {
-                    dwFlashBaseAddr = 0xA0000000;
-                }; // 0x00
+                else
+                    dwFlashBaseAddr = 0xA0000000; // 0x00
                 // get which protection, read or write from the header block:
                 DWORD flashProtection;
                 //  can be 0, 1 or 2. 0 is probably for reading, 1 is for writing
@@ -1160,7 +1164,8 @@ int main(void)
                 } else { // 0x00
                     flashProtection = READ_PROTECTION;
                 };
-                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr, Usr0Password1, User0Password2, ucb);
+                FLASH_sendPasswords(flashProtection, dwFlashBaseAddr,
+                                    Usr0Password1, User0Password2, ucb);
                 SendCANMessage(BSL_SUCCESS);
                 break;
 			case BSL_PROGRAM_FLASH:
@@ -1226,6 +1231,19 @@ int main(void)
                 dwSize |= ( HeaderBlock[9] & 0xFF);
                 SendCANMessage(BSL_READ_CMPRSSD); // send ackn for header
                 ReadCompressed(dwAddress, dwSize);
+                break;
+	        case BSL_KEEP_ALIVE:
+                // Send message for testing
+                CAN_test_arr[0] = 0xDE;
+                CAN_test_arr[1] = 0xAD;
+                CAN_test_arr[2] = 0xBE;
+                CAN_test_arr[3] = 0xEF;
+                CAN_test_arr[4] = 0xD0;
+                CAN_test_arr[5] = 0x0D;
+                CAN_test_arr[6] = 0xBA;
+                CAN_test_arr[7] = 0xAD;
+                // SendCANMessage(BSL_KEEP_ALIVE); // send ackn for header
+                SendCANFrame(CAN_test_arr);
                 break;
             case BSL_READ_UNCMPRSSD:
                 //Read the sector size additionally to the sector address

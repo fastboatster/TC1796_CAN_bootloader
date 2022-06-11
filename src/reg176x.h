@@ -154,7 +154,7 @@
 #define CAN_MOCTR1	(*((unsigned int volatile *) 0xF000463C))	/* Message Object 1 Control Register  */
 
 #define CAN_MODATAH0 (*((unsigned int volatile *) 0xF0004614))	/* Message Object 0 Data Register High  */
-#define CAN_MODATAH1 (*((unsigned int volatile *) 0xF0004614))	/* Message Object 1 Data Register High  */
+#define CAN_MODATAH1 (*((unsigned int volatile *) 0xF0004634))	/* Message Object 1 Data Register High  */
 
 
 #define CAN_MODATAL0_BB (*((unsigned int volatile *) 0xF0004410))	/* Message Object 0 Data Register Low  */
@@ -167,7 +167,7 @@
 #define CAN_MOCTR1_BB	(*((unsigned int volatile *) 0xF000443C))	/* Message Object 1 Control Register  */
 
 #define CAN_MODATAH0_BB (*((unsigned int volatile *) 0xF0004414))	/* Message Object 0 Data Register High  */
-#define CAN_MODATAH1_BB (*((unsigned int volatile *) 0xF0004414))	/* Message Object 1 Data Register High  */
+#define CAN_MODATAH1_BB (*((unsigned int volatile *) 0xF0004434))	/* Message Object 1 Data Register High  */
 
 
 /*

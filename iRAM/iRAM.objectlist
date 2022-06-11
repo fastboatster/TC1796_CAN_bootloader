@@ -1,0 +1,3 @@
+src/crt0.o
+src/main.o
+src/lz4.o

@@ -59,7 +59,7 @@ __EXT_RAM_BEGIN = 0xa1000000;
 __EXT_RAM_SIZE = 1M;
 
 
-__USTACK_SIZE = DEFINED (__USTACK_SIZE) ? __USTACK_SIZE : 1K;  /* Section for ustack*/ 
+__USTACK_SIZE = DEFINED (__USTACK_SIZE) ? __USTACK_SIZE : 64K;  /* Section for ustack*/
 __ISTACK_SIZE = DEFINED (__ISTACK_SIZE) ? __ISTACK_SIZE : 256;  /* Section for istack*/ 
 __HEAP_SIZE = DEFINED (__HEAP_SIZE) ? __HEAP_SIZE : 4K;  /* Section for heap*/ 
 __CSA_SIZE = DEFINED (__CSA_SIZE) ? __CSA_SIZE : 16K;  /* Section for CSA*/ 
@@ -612,7 +612,7 @@ SECTIONS
 		. = ALIGN(8);
 		 __USTACK = . ;
 		 __USTACK_END = . ;
-	} > DMI_LDRAM
+	} > SRAM /* was set to DMI_LDRAM before */
 	
 	/*
 	 * Section for istack

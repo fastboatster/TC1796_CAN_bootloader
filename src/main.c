@@ -206,19 +206,23 @@ void EraseSector(DWORD dwSectorAddr,DWORD dwSize)
 
 	//check if address is valid
 	if((dwSectorAddr >= 0xA0000000) && (dwSectorAddr < 0xA0200000)) { //PFlash 0
+        // sectors 0 - 7 with start addr < 0xA0020000
 		if (dwSectorAddr<0xA0020000) {
-			if (!(dwSectorAddr & PFLASH_MASK1)) {
+			if (!(dwSectorAddr & PFLASH_MASK1)) { // i.e., 0xA001C000 & 0x3FFF
 				SectorAddressValid = 1;
 			}
-		} else if ((dwSectorAddr>=0xA0020000) && (dwSectorAddr<0xA0040000)) {
+		} // pretty much just one sector 0xA0020000 - 0xA003FFFF
+        else if ((dwSectorAddr>=0xA0020000) && (dwSectorAddr<0xA0040000)) {
 			if (!(dwSectorAddr & PFLASH_MASK2))
 				SectorAddressValid = 1;
-		} else {
+		}
+        // sectors 0xA0040000 - 0xA007FFFF, 0xA0080000 - 0xA00FFFFF, 0xA0100000 - 0xA017FFFF, 0xA0180000 - 0xA01FFFFF
+        else {
 			if (!(dwSectorAddr & PFLASH_MASK3))
 				SectorAddressValid = 1;
 		}
-
-	} else if ((dwSectorAddr >= 0xA0200000) && (dwSectorAddr < 0xA0400000)) { //PFlash 1
+	} // doesn't apply to TC1796/TC1766 as there's only PFlash 0
+    else if ((dwSectorAddr >= 0xA0200000) && (dwSectorAddr < 0xA0400000)) { //PFlash 1
 		if (dwSectorAddr<0xA0220000) {
 			if (!(dwSectorAddr & PFLASH_MASK1))
 				SectorAddressValid = 1;
@@ -229,7 +233,8 @@ void EraseSector(DWORD dwSectorAddr,DWORD dwSize)
 			if (!(dwSectorAddr & PFLASH_MASK3))
 				SectorAddressValid = 1;
 		}
-	} else if ((dwSectorAddr == 0xAFE00000) || (dwSectorAddr == 0xAFE10000)) { //DFlash
+	}
+    else if ((dwSectorAddr == 0xAFE00000) || (dwSectorAddr == 0xAFE10000)) { //DFlash only has 2 sectors
 		PFlash = 0;
 		SectorAddressValid = 1;
 	}
@@ -243,7 +248,7 @@ void EraseSector(DWORD dwSectorAddr,DWORD dwSize)
 	//***************** Check if sector is already empty ************
 	DWORD dwAddr = dwSectorAddr;
 	DWORD size = dwSize;
-
+    // check if dwSize is 4-byte aligned and non-zero
 	if((dwSize & 0x03) || (dwSize==0)) {
 		SendCANMessage(BSL_ERASE_ERROR);
 		return;
@@ -816,8 +821,9 @@ _Bool WaitForDataBlock(void)
 			SendCANMessage(BSL_CHKSUM_ERROR);
 			DataBlock[0] = 0xFF; //make block type invalid
 			return 0;
-		}
-
+		};
+        // send confirmation message that EOT is received:
+        SendCANMessage(BSL_SUCCESS);
 		return 0;
 	}
 
@@ -863,8 +869,9 @@ _Bool WaitForDataBlock(void)
 	if (chksum != DataBlock[PAGE_SIZE+7]) {
 		SendCANMessage(BSL_CHKSUM_ERROR);
 		return 0;
-	}
-
+	};
+    // send confirmation message that datablock is complete
+    SendCANMessage(BSL_SUCCESS);
 	return 1;
 
 }
